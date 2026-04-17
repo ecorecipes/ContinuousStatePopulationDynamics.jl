@@ -1,0 +1,11 @@
+[deps]
+ContinuousStatePopulationDynamics = "5a68bfab-dffa-4d3c-8723-3d784ca1a3c3"
+DelayDiffEq = "bcd4f6db-9728-5f36-b5f7-82caef46ccdb"
+OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+StructuredPopulationCore = "33358fd2-7d60-4541-bded-caea801370e0"
+
+[sources]
+ContinuousStatePopulationDynamics = {path = ".."}
+StructuredPopulationCore = {path = "../../StructuredPopulationCore.jl"}
