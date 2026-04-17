@@ -1,0 +1,16 @@
+# Julia
+Manifest.toml
+*.jl.cov
+*.jl.mem
+docs/build/
+docs/site/
+
+# Quarto
+vignettes/**/*.html
+vignettes/**/*.pdf
+vignettes/**/*.tex
+vignettes/**/*_files/
+
+# OS
+.DS_Store
+Thumbs.db
