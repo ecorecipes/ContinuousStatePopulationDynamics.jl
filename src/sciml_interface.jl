@@ -269,6 +269,23 @@ function _aux_du(r::Resolved, population, aux, p, t, domain, T::Type)
     return du_aux
 end
 
+# One-shot field/flux evaluators: resolve the calling convention and evaluate in
+# a single call. The lowered RHS resolves once and reuses the result, so it does
+# not use these. They exist for code that needs to evaluate an arbitrary raw
+# field once — notably the CategoricalPopulationDynamics PSPM extension, which
+# aggregates several additive sub-fields per transition into one combined field.
+function _evaluate_spatial_field(field, points, population, aux, p, t, T::Type;
+        field_name::AbstractString)
+    r = _resolve_field(field, points, population, aux, p, t; field_name = field_name)
+    return _spatial_values(r, points, population, aux, p, t, T; field_name = field_name)
+end
+
+function _evaluate_boundary_flux(flux, population, aux, p, t, domain, T::Type;
+        field_name::AbstractString)
+    r = _resolve_boundary_flux(flux, population, aux, p, t, domain; field_name = field_name)
+    return _flux_value(r, population, aux, p, t, domain, T)
+end
+
 """
     to_ode_problem(prob::ContinuousIPMProblem)
 

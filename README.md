@@ -24,11 +24,13 @@ types as separate extension packages rather than widening the core backend.
   dynamics.
 - **SciML lowering**: `to_ode_problem`, `to_dde_problem`, and
   `CommonSolve.solve` dispatch into the SciML solver stack.
-- **Categorical lowering target (planned)**: intended to integrate with
+- **Categorical lowering target**:
   [CategoricalPopulationDynamics.jl](https://github.com/ecorecipes/CategoricalPopulationDynamics.jl)
-  via a dedicated weakdep extension so continuous-trait continuous-time
-  categorical targets lower here rather than through the legacy IPM path. This
-  extension is not yet implemented in this package.
+  ships a weakdep extension (`...ContinuousStatePopulationDynamicsExt`) that
+  lowers continuous-trait continuous-time categorical specifications to
+  `ContinuousIPMProblem` / `PSPMIPMProblem` here, rather than through the legacy
+  IPM path. The extension is hosted in that package; nothing extra is required
+  here.
 
 ## Installation
 

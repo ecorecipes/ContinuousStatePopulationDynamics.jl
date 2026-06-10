@@ -204,6 +204,30 @@ using SciMLBase: DDEProblem, ODEProblem
                 boundary_lower = (a, b, c, d, e, f) -> 0.0))
     end
 
+    @testset "One-shot field/flux evaluators (extension contract)" begin
+        # CategoricalPopulationDynamics' PSPM extension aggregates additive
+        # sub-fields by calling these one-shot evaluators; keep them working.
+        C = ContinuousStatePopulationDynamics
+        pts = [0.1, 0.4, 0.9]
+        pop = [1.0, 2.0, 3.0]
+        aux = Float64[]
+
+        @test C._evaluate_spatial_field(0.5, pts, pop, aux, nothing, 0.0, Float64;
+            field_name = "mortality") == fill(0.5, 3)
+        @test C._evaluate_spatial_field((z, population, a, p, t) -> 2 .* z,
+            pts, pop, aux, nothing, 0.0, Float64; field_name = "source") ≈ 2 .* pts
+        @test C._evaluate_spatial_field(nothing, pts, pop, aux, nothing, 0.0, Float64;
+            field_name = "source") == zeros(3)
+
+        d = ContinuousDomain(0.0, 1.0, 3)
+        @test C._evaluate_boundary_flux(0.7, pop, aux, nothing, 0.0, d, Float64;
+            field_name = "boundary_lower") == 0.7
+        @test C._evaluate_boundary_flux((population, a, p, t, dom) -> sum(population),
+            pop, aux, nothing, 0.0, d, Float64; field_name = "boundary_lower") == 6.0
+        @test C._evaluate_boundary_flux(nothing, pop, aux, nothing, 0.0, d, Float64;
+            field_name = "boundary_upper") == 0.0
+    end
+
     @testset "Continuous solve dispatch errors" begin
         prob = ContinuousIPMProblem([-0.2 0.0; 0.0 -0.1], domain, [1.0, 1.0], (0.0, 1.0))
         dprob = DelayIPMProblem([-0.2 0.0; 0.0 -0.1], [DelayGeneratorTerm(1.0, zeros(2, 2))],
