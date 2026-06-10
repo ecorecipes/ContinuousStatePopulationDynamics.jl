@@ -26,6 +26,26 @@ struct FixedMeshUpwind <: AbstractTransportDiscretization end
 
 Single-trait transport problem over a `ContinuousDomain`, plus optional coupled
 auxiliary ODE state.
+
+# Field arguments
+
+The `velocity`, `mortality`, and `source` fields may be a `Number` (constant
+over the domain), an `AbstractVector` of per-location values, or a callable.
+**Callables are vectorized**: they are passed the entire mesh as a vector, not
+one location at a time. `mortality` and `source` receive the mesh midpoints
+(`meshpoints(domain)`, length `n`); `velocity` receives the bin edges
+(`bounds(domain)`, length `n + 1`), or it may return `n` cell values that are
+interpolated to faces. Supported callable signatures, tried in order, are
+`(points, population, aux, p, t)`, `(points, population, p, t)`,
+`(points, aux, p, t)`, `(points, p, t)`, `(points, t, p)`, and `(points)`.
+Because a generic closure matches the first signature it has the right arity
+for, write field functions against the whole-mesh-vector convention (e.g.
+`z -> 0.2 .* z`), not against a single scalar location (`z -> 0.2 * z` happens
+to work only because scalar multiplication broadcasts; `z -> z^2` would not).
+
+`boundary_lower`/`boundary_upper` are scalar fluxes (a `Number` or a callable
+returning one); they are used at an inflow edge, while outflow edges use the
+upwinded interior value.
 """
 struct PSPMIPMProblem{
         S<:AbstractIPMStructure,

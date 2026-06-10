@@ -117,6 +117,16 @@ function DelayIPMProblem(generator, delay_terms, domain, u0, history, tspan; kwa
     DelayIPMProblem(SimpleIPM(), generator, delay_terms, domain, u0, history, tspan; kwargs...)
 end
 
+"""
+    remake(prob; kwargs...)
+
+Return a copy of a continuous-state dynamics problem (`ContinuousIPMProblem`,
+`DelayIPMProblem`, or `PSPMIPMProblem`) with selected fields replaced. This
+extends `SciMLBase.remake`, so it composes with the same `remake` used on the
+lowered SciML problems. Any field not supplied as a keyword is copied from
+`prob`; the result is re-validated and re-promoted through the normal
+constructor.
+"""
 function remake(prob::ContinuousIPMProblem;
         structure = prob.structure,
         generator = prob.generator,

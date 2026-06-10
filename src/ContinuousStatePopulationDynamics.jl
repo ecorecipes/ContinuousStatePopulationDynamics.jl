@@ -15,6 +15,11 @@ using CommonSolve
 using LinearAlgebra
 using StructuredPopulationCore
 using SciMLBase
+# Extend SciMLBase.remake rather than defining a shadowing `remake`. This keeps a
+# single `remake` generic across our problem types and SciML's own problem types,
+# so downstream code that does `using SciMLBase`/`using OrdinaryDiffEq` alongside
+# this package does not hit an export ambiguity on the unqualified name.
+import SciMLBase: remake
 
 export AbstractContinuousStateDynamicsProblem
 export AbstractContinuousIPMProblem

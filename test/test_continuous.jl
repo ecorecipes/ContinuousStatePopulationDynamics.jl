@@ -102,6 +102,108 @@ using SciMLBase: DDEProblem, ODEProblem
         @test du ≈ [0.0, 0.5, 2.5]
     end
 
+    @testset "Generator/source calling conventions" begin
+        u0 = [1.0, 0.5]
+        p = (decay = 0.3,)
+        Gp = [-0.3 0.0; 0.3 -0.1]
+
+        # generator and source as (p, t). A generic 2-arg callable matches (p, t).
+        prob_pt = ContinuousIPMProblem((p, t) -> [-p.decay 0.0; p.decay -0.1],
+            domain, u0, (0.0, 1.0); p = p, source = (p, t) -> [0.0, 0.05])
+        du = zeros(2)
+        to_ode_problem(prob_pt).f(du, u0, p, 0.4)
+        @test du ≈ Gp * u0 .+ [0.0, 0.05]
+
+        # A generic 3-arg callable always resolves to (u, p, t); the (u, t, p)
+        # convention is only reachable when (u, p, t) does not match, so restrict
+        # the time argument's type to force it.
+        gen_utp(u, t::Real, q) = [-q.decay 0.0; q.decay -0.1]
+        prob_utp = ContinuousIPMProblem(gen_utp, domain, u0, (0.0, 1.0); p = p)
+        fill!(du, 0.0)
+        to_ode_problem(prob_utp).f(du, u0, p, 0.4)
+        @test du ≈ Gp * u0
+
+        # Likewise (t, p) is reachable only when (p, t) does not match.
+        gen_tp(t::Real, q) = [-q.decay 0.0; q.decay -0.1]
+        prob_tp = ContinuousIPMProblem(gen_tp, domain, u0, (0.0, 1.0); p = p)
+        fill!(du, 0.0)
+        to_ode_problem(prob_tp).f(du, u0, p, 0.4)
+        @test du ≈ Gp * u0
+
+        # unsupported generator / source signatures error at lowering time
+        @test_throws ArgumentError to_ode_problem(
+            ContinuousIPMProblem((a, b, c, d) -> zeros(2, 2), domain, u0, (0.0, 1.0)))
+        @test_throws ArgumentError to_ode_problem(
+            ContinuousIPMProblem([-0.1 0.0; 0.0 -0.1], domain, u0, (0.0, 1.0);
+                source = (a, b, c, d) -> zeros(2)))
+
+        # length mismatches surface as DimensionMismatch from the RHS
+        bad_src = ContinuousIPMProblem([-0.1 0.0; 0.0 -0.1], domain, u0, (0.0, 1.0);
+            source = (u, p, t) -> [0.0])
+        @test_throws DimensionMismatch to_ode_problem(bad_src).f(zeros(2), u0, nothing, 0.0)
+    end
+
+    @testset "Delay operator calling conventions" begin
+        G = [-0.5 0.0; 0.2 -0.1]
+        u0 = [1.0, 0.5]
+        history(p, t) = [2.0, 1.0]
+        Adelay = [0.0 0.4; 0.0 0.0]
+
+        # callable operator returning a matrix, multiplied by the lagged state
+        delay_mat = DelayGeneratorTerm(1.0, (u, p, t) -> Adelay)
+        prob_mat = DelayIPMProblem(G, [delay_mat], domain, u0, history, (0.0, 2.0))
+        du = zeros(2)
+        dde = to_dde_problem(prob_mat)
+        dde.f(du, u0, dde.h, nothing, 0.5)
+        @test du ≈ G * u0 .+ Adelay * history(nothing, -0.5)
+
+        # callable operator returning a vector contribution directly
+        delay_vec = DelayGeneratorTerm(1.0, (u, h, p, t, lag) -> [0.3, -0.2])
+        prob_vec = DelayIPMProblem(G, [delay_vec], domain, u0, history, (0.0, 2.0))
+        fill!(du, 0.0)
+        dde2 = to_dde_problem(prob_vec)
+        dde2.f(du, u0, dde2.h, nothing, 0.5)
+        @test du ≈ G * u0 .+ [0.3, -0.2]
+    end
+
+    @testset "PSPM scalar velocity field" begin
+        transport_domain = ContinuousDomain(0.0, 1.0, 3)
+        n0 = [1.0, 2.0, 3.0]
+        prob = PSPMIPMProblem(transport_domain, n0, (0.0, 1.0); velocity = 1.0)
+        du = zeros(3)
+        to_ode_problem(prob).f(du, n0, nothing, 0.0)
+        @test du ≈ [-3.0, -3.0, -3.0]
+    end
+
+    @testset "PSPM per-point and boundary-flux conventions" begin
+        d = ContinuousDomain(0.0, 1.0, 3)
+        zz = meshpoints(d)
+        n0 = [1.0, 1.0, 1.0]
+        hh = step_size(d)
+
+        # A scalar-location mortality forces the per-point broadcast fallback,
+        # since it is not applicable to the whole mesh vector.
+        mort_pp(x::Real) = 0.1 * x
+        prob = PSPMIPMProblem(d, n0, (0.0, 1.0); velocity = 0.0, mortality = mort_pp)
+        du = zeros(3)
+        to_ode_problem(prob).f(du, n0, nothing, 0.0)
+        @test du ≈ -0.1 .* zz .* n0
+
+        # boundary_lower as a (p, t) callable: constant inflow at the left face
+        prob_bf = PSPMIPMProblem(d, n0, (0.0, 1.0); velocity = 1.0,
+            boundary_lower = (p, t) -> 2.0)
+        fill!(du, 0.0)
+        to_ode_problem(prob_bf).f(du, n0, nothing, 0.0)
+        @test du ≈ [-(1.0 - 2.0) / hh, 0.0, 0.0]
+
+        # unsupported field / flux signatures error at lowering time
+        @test_throws ArgumentError to_ode_problem(
+            PSPMIPMProblem(d, n0, (0.0, 1.0); velocity = (a, b, c, d, e, f, g) -> 0.0))
+        @test_throws ArgumentError to_ode_problem(
+            PSPMIPMProblem(d, n0, (0.0, 1.0); velocity = 1.0,
+                boundary_lower = (a, b, c, d, e, f) -> 0.0))
+    end
+
     @testset "Continuous solve dispatch errors" begin
         prob = ContinuousIPMProblem([-0.2 0.0; 0.0 -0.1], domain, [1.0, 1.0], (0.0, 1.0))
         dprob = DelayIPMProblem([-0.2 0.0; 0.0 -0.1], [DelayGeneratorTerm(1.0, zeros(2, 2))],
