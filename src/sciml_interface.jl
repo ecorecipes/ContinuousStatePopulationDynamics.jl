@@ -286,6 +286,12 @@ function _evaluate_boundary_flux(flux, population, aux, p, t, domain, T::Type;
     return _flux_value(r, population, aux, p, t, domain, T)
 end
 
+function _evaluate_auxiliary_rhs(rhs, population, aux, p, t, domain, T::Type)
+    isempty(aux) && return T[]
+    r = _resolve_aux_rhs(rhs, population, aux, p, t, domain)
+    return _aux_du(r, population, aux, p, t, domain, T)
+end
+
 """
     to_ode_problem(prob::ContinuousIPMProblem)
 

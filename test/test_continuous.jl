@@ -226,6 +226,16 @@ using SciMLBase: DDEProblem, ODEProblem
             pop, aux, nothing, 0.0, d, Float64; field_name = "boundary_lower") == 6.0
         @test C._evaluate_boundary_flux(nothing, pop, aux, nothing, 0.0, d, Float64;
             field_name = "boundary_upper") == 0.0
+
+        # auxiliary-rhs one-shot evaluator (used by the PSPM aux aggregator)
+        aux_state = [0.5, 1.0]
+        @test C._evaluate_auxiliary_rhs(nothing, pop, aux_state, nothing, 0.0, d, Float64) ==
+            zeros(2)
+        @test C._evaluate_auxiliary_rhs(
+            (population, a, p, t, dom) -> [sum(population), a[1]],
+            pop, aux_state, nothing, 0.0, d, Float64) == [6.0, 0.5]
+        @test C._evaluate_auxiliary_rhs(nothing, pop, Float64[], nothing, 0.0, d, Float64) ==
+            Float64[]
     end
 
     @testset "Continuous solve dispatch errors" begin
