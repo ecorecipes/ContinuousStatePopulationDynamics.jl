@@ -173,17 +173,122 @@ function to_sde_problem(prob::PSPMIPMProblem)
 end
 
 # ----------------------------------------------------------------------------
+# PSPMIPMProblem: exact mesh-discretized jump process
+# ----------------------------------------------------------------------------
+
+_pspm_reaction_propensity(coef, i) = (n, p, t) -> coef * n[i]
+
+"""
+    to_demographic_reactions(prob::PSPMIPMProblem)
+
+Build the mesh-discretized `DemographicReactionSystem` for a transport problem:
+upwind advection becomes migration between adjacent bins, mortality and
+boundary outflow become per-capita deaths, and the inflow boundary flux / source
+become births. The mean reproduces the deterministic upwind transport for linear
+fields. Field values are evaluated **once at construction** (exact for constant
+or trait-only fields; for state/time-dependent fields use `to_sde_problem`).
+Coupled auxiliary ODE state is not supported by the jump route.
+"""
+function to_demographic_reactions(prob::PSPMIPMProblem)
+    prob.discretization isa FixedMeshUpwind || throw(ArgumentError(
+        "Only FixedMeshUpwind discretization is currently supported for PSPMIPMProblem"))
+    isempty(prob.aux0) || throw(ArgumentError(
+        "exact demographic (jump) realization of a PSPMIPMProblem does not support coupled " *
+        "auxiliary ODE state (aux0); use to_sde_problem instead."))
+    z = meshpoints(prob.domain)
+    faces = bounds(prob.domain)
+    h = step_size(prob.domain)
+    n = length(prob.n0)
+    domain = prob.domain
+    t0 = prob.tspan[1]
+    p = prob.p
+    aux0 = prob.aux0
+    T = Float64
+
+    rvel = _resolve_field(prob.velocity, faces, prob.n0, aux0, p, t0; field_name = "velocity")
+    rmort = _resolve_field(prob.mortality, z, prob.n0, aux0, p, t0; field_name = "mortality")
+    rsrc = _resolve_field(prob.source, z, prob.n0, aux0, p, t0; field_name = "source")
+    rlow = _resolve_boundary_flux(prob.boundary_lower, prob.n0, aux0, p, t0, domain;
+        field_name = "boundary_lower")
+    rup = _resolve_boundary_flux(prob.boundary_upper, prob.n0, aux0, p, t0, domain;
+        field_name = "boundary_upper")
+    vel = _face_values(rvel, faces, prob.n0, aux0, p, t0, T; field_name = "velocity")
+    mort = _spatial_values(rmort, z, prob.n0, aux0, p, t0, T; field_name = "mortality")
+    src = _spatial_values(rsrc, z, prob.n0, aux0, p, t0, T; field_name = "source")
+    lower = _flux_value(rlow, prob.n0, aux0, p, t0, domain, T)
+    upper = _flux_value(rup, prob.n0, aux0, p, t0, domain, T)
+
+    reactions = DemographicReaction[]
+    # interior advection (upwind) at face i+1 between bins i and i+1
+    for i in 1:(n - 1)
+        v = vel[i + 1]
+        if v > 0
+            push!(reactions, DemographicReaction(_pspm_reaction_propensity(v / h, i), n,
+                i => -1, i + 1 => +1))
+        elseif v < 0
+            push!(reactions, DemographicReaction(_pspm_reaction_propensity(-v / h, i + 1), n,
+                i + 1 => -1, i => +1))
+        end
+    end
+    # left boundary face
+    if vel[1] >= 0
+        lower > 0 && push!(reactions, DemographicReaction(lower / h, n, 1 => +1))      # inflow birth
+    else
+        push!(reactions, DemographicReaction(_pspm_reaction_propensity(-vel[1] / h, 1), n,
+            1 => -1))                                                                   # outflow death
+    end
+    # right boundary face
+    if vel[end] >= 0
+        push!(reactions, DemographicReaction(_pspm_reaction_propensity(vel[end] / h, n), n,
+            n => -1))                                                                   # outflow death
+    else
+        inflow = -upper / h
+        inflow > 0 && push!(reactions, DemographicReaction(inflow, n, n => +1))        # inflow birth
+    end
+    # mortality (per-capita death) and source (birth)
+    for i in 1:n
+        mort[i] > 0 && push!(reactions, DemographicReaction(_pspm_reaction_propensity(mort[i], i),
+            n, i => -1))
+    end
+    for i in 1:n
+        src[i] > 0 && push!(reactions, DemographicReaction(src[i], n, i => +1))
+    end
+    return DemographicReactionSystem(n, reactions)
+end
+
+"""
+    solve(prob::PSPMIPMProblem, ::Demographic; rng, saveat=nothing, max_events)
+
+Exact continuous-time Markov jump realization (Gillespie) of a transport problem
+on the mesh. Returns a [`ContinuousDemographicSolution`] of integer bin counts.
+"""
+function CommonSolve.solve(prob::PSPMIPMProblem, ::Demographic;
+        rng::AbstractRNG = Random.default_rng(), saveat = nothing,
+        max_events::Int = 1_000_000)
+    sys = to_demographic_reactions(prob)
+    u0 = round.(Int, prob.n0)
+    ts, us = gillespie(rng, sys, u0, prob.tspan; p = prob.p, max_events = max_events)
+    if saveat === nothing
+        return ContinuousDemographicSolution(collect(float.(ts)), us, :Success)
+    end
+    grid = _demographic_grid(prob.tspan, saveat)
+    return ContinuousDemographicSolution(collect(float.(grid)),
+        _sample_on_grid(ts, us, grid), :Success)
+end
+
+# ----------------------------------------------------------------------------
 # Ensemble (exact jump route)
 # ----------------------------------------------------------------------------
 
 """
-    demographic_ensemble(prob::ContinuousIPMProblem; n_reps=100, saveat=1.0, rng=...)
+    demographic_ensemble(prob; n_reps=100, saveat=1.0, rng=...)
 
-Run `n_reps` independent exact (jump-process) demographic realizations on a common
-`saveat` grid and return `(totals, sols)` where `totals` is `(n_grid × n_reps)`
-of total population sizes (consumable by `quasi_extinction`).
+Run `n_reps` independent exact (jump-process) demographic realizations of a
+`ContinuousIPMProblem` or `PSPMIPMProblem` on a common `saveat` grid and return
+`(totals, sols)` where `totals` is `(n_grid × n_reps)` of total population sizes
+(consumable by `quasi_extinction`).
 """
-function demographic_ensemble(prob::ContinuousIPMProblem; n_reps::Int = 100,
+function demographic_ensemble(prob::AbstractContinuousIPMProblem; n_reps::Int = 100,
         saveat = 1.0, rng::AbstractRNG = Random.default_rng())
     sols = [solve(prob, Demographic(); rng = rng, saveat = saveat) for _ in 1:n_reps]
     grid = sols[1].t

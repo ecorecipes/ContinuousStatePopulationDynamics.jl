@@ -2,6 +2,7 @@ using Random
 using LinearAlgebra
 using StructuredPopulationCore: cle_drift!, cle_noise!, num_reactions, quasi_extinction
 import SciMLBase
+import OrdinaryDiffEq
 
 # Hand-rolled Euler-Maruyama mean for a reaction-CLE (avoids a heavy SDE solver dep).
 function _em_mean(sys, u0, tspan, dt, reps, rng)
@@ -99,6 +100,33 @@ end
         gv = zeros(3); sde.f.g(gv, n0, sde.p, 0.0)
         # advection is drift-only; noise = sqrt(mortality·n + source); boundaries are 0 here
         @test isapprox(gv, sqrt.(0.2 .* n0 .+ 0.1); atol=1e-10)
+    end
+
+    @testset "PSPM exact Gillespie: mean tracks deterministic transport" begin
+        td = ContinuousDomain(0.0, 1.0, 5)
+        n0 = [20, 20, 20, 20, 20]
+        prob = PSPMIPMProblem(td, n0, (0.0, 1.0);
+            velocity=0.5, mortality=0.1, boundary_lower=4.0)   # constant linear fields
+
+        sol = OrdinaryDiffEq.solve(to_ode_problem(prob), OrdinaryDiffEq.Tsit5();
+            saveat=0.25, reltol=1e-9, abstol=1e-11)
+        grid = 0.0:0.25:1.0
+        reps = 4000
+        acc = [zeros(5) for _ in grid]
+        for _ in 1:reps
+            s = solve(prob, Demographic(); rng=rng, saveat=grid)
+            for g in eachindex(grid)
+                acc[g] .+= s.u[g]
+            end
+        end
+        for g in eachindex(grid)
+            @test isapprox(acc[g] ./ reps, sol.u[g]; rtol=0.08, atol=1.5)
+        end
+
+        # coupled auxiliary ODE state is not supported by the jump route
+        paux = PSPMIPMProblem(td, n0, (0.0, 1.0); velocity=0.5, aux0=[1.0],
+            auxiliary_rhs=(pop, a, p, t, d) -> [0.0])
+        @test_throws ArgumentError solve(paux, Demographic())
     end
 
     @testset "errors: callable generator is not demographic-realizable" begin
