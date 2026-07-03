@@ -51,6 +51,24 @@ function _sample_on_grid(ts, us, grid)
     return out
 end
 
+function _require_integer_counts(u0; name::AbstractString)
+    u0i = Vector{Int}(undef, length(u0))
+    for i in eachindex(u0)
+        xi = round(Int, u0[i])
+        isapprox(u0[i], xi; atol = 1e-8, rtol = 0) || throw(ArgumentError(
+            "exact demographic solves require integer initial counts; " *
+            "$(name)[$i] = $(u0[i]) is not integer-valued"))
+        u0i[i] = xi
+    end
+    return u0i
+end
+
+function _demographic_retcode(sys, ts, us, tspan, p, max_events::Int)
+    length(ts) == max_events + 1 || return :Success
+    ts[end] < float(tspan[2]) || return :Success
+    return total_propensity(sys, us[end], p, ts[end]) > 0 ? :MaxIters : :Success
+end
+
 # ----------------------------------------------------------------------------
 # ContinuousIPMProblem: generator -> reactions
 # ----------------------------------------------------------------------------
@@ -84,14 +102,15 @@ function CommonSolve.solve(prob::ContinuousIPMProblem, ::Demographic;
         rng::AbstractRNG = Random.default_rng(), saveat = nothing,
         max_events::Int = 1_000_000)
     sys = to_demographic_reactions(prob)
-    u0 = round.(Int, prob.u0)
+    u0 = _require_integer_counts(prob.u0; name = "u0")
     ts, us = gillespie(rng, sys, u0, prob.tspan; p = prob.p, max_events = max_events)
+    retcode = _demographic_retcode(sys, ts, us, prob.tspan, prob.p, max_events)
     if saveat === nothing
-        return ContinuousDemographicSolution(collect(float.(ts)), us, :Success)
+        return ContinuousDemographicSolution(collect(float.(ts)), us, retcode)
     end
     grid = _demographic_grid(prob.tspan, saveat)
     return ContinuousDemographicSolution(collect(float.(grid)),
-        _sample_on_grid(ts, us, grid), :Success)
+        _sample_on_grid(ts, us, grid), retcode)
 end
 
 """
@@ -161,7 +180,7 @@ function to_sde_problem(prob::PSPMIPMProblem)
         end
         # boundary influx = birth events into the edge cells (rate = flux / h)
         @inbounds g[1] = sqrt(g[1]^2 + max(lower, zero(T)) / h)
-        @inbounds g[n_pop] = sqrt(g[n_pop]^2 + max(upper, zero(T)) / h)
+        @inbounds g[n_pop] = sqrt(g[n_pop]^2 + max(-upper, zero(T)) / h)
         @inbounds for i in (n_pop + 1):length(u)
             g[i] = zero(T)
         end
@@ -178,6 +197,30 @@ end
 
 _pspm_reaction_propensity(coef, i) = (n, p, t) -> coef * n[i]
 
+function _resolve_exact_pspm_field(field, points, population0, aux0, p, t0;
+        field_name::AbstractString)
+    r = _resolve_field(field, points, population0, aux0, p, t0; field_name = field_name)
+    r === nothing && return nothing
+    r.mode in (0, 6, 12) && return r
+    throw(ArgumentError(
+        "exact demographic solve for PSPMIPMProblem only supports $(field_name) that are " *
+        "constant in population and time (numbers, vectors, or spatial callables of the mesh " *
+        "points alone). State- or time-dependent $(field_name) would produce an incorrect " *
+        "jump process; use to_sde_problem or a deterministic solve instead."))
+end
+
+function _resolve_exact_pspm_boundary_flux(flux, population0, aux0, p, t0, domain;
+        field_name::AbstractString)
+    r = _resolve_boundary_flux(flux, population0, aux0, p, t0, domain;
+        field_name = field_name)
+    r === nothing && return nothing
+    r.mode == 0 && return r
+    throw(ArgumentError(
+        "exact demographic solve for PSPMIPMProblem only supports constant numeric " *
+        "$(field_name). State- or time-dependent boundary fluxes would produce an incorrect " *
+        "jump process; use to_sde_problem or a deterministic solve instead."))
+end
+
 """
     to_demographic_reactions(prob::PSPMIPMProblem)
 
@@ -185,8 +228,9 @@ Build the mesh-discretized `DemographicReactionSystem` for a transport problem:
 upwind advection becomes migration between adjacent bins, mortality and
 boundary outflow become per-capita deaths, and the inflow boundary flux / source
 become births. The mean reproduces the deterministic upwind transport for linear
-fields. Field values are evaluated **once at construction** (exact for constant
-or trait-only fields; for state/time-dependent fields use `to_sde_problem`).
+fields. Only state/time-independent coefficients are supported on the exact jump
+route; state- or time-dependent callables are rejected with an error because the
+reference Gillespie realizer assumes propensities are constant between events.
 Coupled auxiliary ODE state is not supported by the jump route.
 """
 function to_demographic_reactions(prob::PSPMIPMProblem)
@@ -205,12 +249,15 @@ function to_demographic_reactions(prob::PSPMIPMProblem)
     aux0 = prob.aux0
     T = Float64
 
-    rvel = _resolve_field(prob.velocity, faces, prob.n0, aux0, p, t0; field_name = "velocity")
-    rmort = _resolve_field(prob.mortality, z, prob.n0, aux0, p, t0; field_name = "mortality")
-    rsrc = _resolve_field(prob.source, z, prob.n0, aux0, p, t0; field_name = "source")
-    rlow = _resolve_boundary_flux(prob.boundary_lower, prob.n0, aux0, p, t0, domain;
+    rvel = _resolve_exact_pspm_field(prob.velocity, faces, prob.n0, aux0, p, t0;
+        field_name = "velocity")
+    rmort = _resolve_exact_pspm_field(prob.mortality, z, prob.n0, aux0, p, t0;
+        field_name = "mortality")
+    rsrc = _resolve_exact_pspm_field(prob.source, z, prob.n0, aux0, p, t0;
+        field_name = "source")
+    rlow = _resolve_exact_pspm_boundary_flux(prob.boundary_lower, prob.n0, aux0, p, t0, domain;
         field_name = "boundary_lower")
-    rup = _resolve_boundary_flux(prob.boundary_upper, prob.n0, aux0, p, t0, domain;
+    rup = _resolve_exact_pspm_boundary_flux(prob.boundary_upper, prob.n0, aux0, p, t0, domain;
         field_name = "boundary_upper")
     vel = _face_values(rvel, faces, prob.n0, aux0, p, t0, T; field_name = "velocity")
     mort = _spatial_values(rmort, z, prob.n0, aux0, p, t0, T; field_name = "mortality")
@@ -266,14 +313,15 @@ function CommonSolve.solve(prob::PSPMIPMProblem, ::Demographic;
         rng::AbstractRNG = Random.default_rng(), saveat = nothing,
         max_events::Int = 1_000_000)
     sys = to_demographic_reactions(prob)
-    u0 = round.(Int, prob.n0)
+    u0 = _require_integer_counts(prob.n0; name = "n0")
     ts, us = gillespie(rng, sys, u0, prob.tspan; p = prob.p, max_events = max_events)
+    retcode = _demographic_retcode(sys, ts, us, prob.tspan, prob.p, max_events)
     if saveat === nothing
-        return ContinuousDemographicSolution(collect(float.(ts)), us, :Success)
+        return ContinuousDemographicSolution(collect(float.(ts)), us, retcode)
     end
     grid = _demographic_grid(prob.tspan, saveat)
     return ContinuousDemographicSolution(collect(float.(grid)),
-        _sample_on_grid(ts, us, grid), :Success)
+        _sample_on_grid(ts, us, grid), retcode)
 end
 
 # ----------------------------------------------------------------------------

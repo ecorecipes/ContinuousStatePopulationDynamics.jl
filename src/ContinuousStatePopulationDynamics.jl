@@ -3,11 +3,11 @@
 
 Continuous-state, continuous-time population dynamics backends.
 
-This package owns the deterministic continuous-time generator, delay, and PSPM
-layers that were previously hosted in `IntegralProjectionModels.jl`.
-Broad stochastic continuous-time semantics are intentionally out of scope here;
-future stochastic support should layer on top of these deterministic problem
-types in separate extension packages rather than widening the core backend.
+This package owns the continuous-time generator, delay, and PSPM layers that
+were previously hosted in `IntegralProjectionModels.jl`. It provides
+deterministic SciML ODE/DDE lowerings, demographic stochasticity via exact jump
+processes and chemical Langevin SDEs, plus the public problem types and helpers
+needed to move between those representations.
 """
 module ContinuousStatePopulationDynamics
 

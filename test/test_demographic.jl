@@ -100,6 +100,12 @@ end
         gv = zeros(3); sde.f.g(gv, n0, sde.p, 0.0)
         # advection is drift-only; noise = sqrt(mortality·n + source); boundaries are 0 here
         @test isapprox(gv, sqrt.(0.2 .* n0 .+ 0.1); atol=1e-10)
+
+        inflow_prob = PSPMIPMProblem(td, zeros(3), (0.0, 1.0);
+            velocity=-0.5, mortality=0.0, source=0.0, boundary_upper=-3.0)
+        inflow_noise = zeros(3)
+        to_sde_problem(inflow_prob).f.g(inflow_noise, inflow_prob.n0, inflow_prob.p, 0.0)
+        @test inflow_noise[end] ≈ sqrt(3.0 / step_size(td))
     end
 
     @testset "PSPM exact Gillespie: mean tracks deterministic transport" begin
@@ -127,6 +133,42 @@ end
         paux = PSPMIPMProblem(td, n0, (0.0, 1.0); velocity=0.5, aux0=[1.0],
             auxiliary_rhs=(pop, a, p, t, d) -> [0.0])
         @test_throws ArgumentError solve(paux, Demographic())
+    end
+
+    @testset "exact solves validate integer initial counts and retcodes" begin
+        cprob = ContinuousIPMProblem(zeros(2, 2), domain, [10.0, 0.0], (0.0, 0.01); source=[0.0, 0.0])
+        csol = solve(cprob, Demographic(); rng=rng)
+        @test csol.u[1] == [10, 0]
+        @test_throws ArgumentError solve(
+            ContinuousIPMProblem(zeros(2, 2), domain, [10.25, 0.0], (0.0, 0.01)),
+            Demographic())
+
+        pprob = PSPMIPMProblem(domain, [10.0, 0.0], (0.0, 0.01); velocity=0.0, source=0.0)
+        psol = solve(pprob, Demographic(); rng=rng)
+        @test psol.u[1] == [10, 0]
+        @test_throws ArgumentError solve(
+            PSPMIPMProblem(domain, [10.25, 0.0], (0.0, 0.01); velocity=0.0, source=0.0),
+            Demographic())
+
+        maxiters_prob = ContinuousIPMProblem(zeros(2, 2), domain, [0.0, 0.0], (0.0, 1.0);
+            source=[1000.0, 0.0])
+        @test solve(maxiters_prob, Demographic(); rng=rng, max_events=1).retcode == :MaxIters
+
+        maxiters_pspm = PSPMIPMProblem(domain, [0.0, 0.0], (0.0, 1.0); velocity=0.0, source=1000.0)
+        @test solve(maxiters_pspm, Demographic(); rng=rng, max_events=1).retcode == :MaxIters
+    end
+
+    @testset "PSPM exact solve rejects state/time-dependent callables" begin
+        td = ContinuousDomain(0.0, 1.0, 3)
+        static_prob = PSPMIPMProblem(td, [5, 5, 5], (0.0, 0.1);
+            velocity=points -> fill(0.5, length(points)),
+            mortality=points -> fill(0.1, length(points)),
+            source=points -> zeros(length(points)))
+        @test solve(static_prob, Demographic(); rng=rng).retcode == :Success
+
+        bad_prob = PSPMIPMProblem(td, [5, 5, 5], (0.0, 0.1);
+            velocity=(points, population, p, t) -> fill(0.5 + 0.01 * sum(population), length(points)))
+        @test_throws ArgumentError solve(bad_prob, Demographic())
     end
 
     @testset "errors: callable generator is not demographic-realizable" begin

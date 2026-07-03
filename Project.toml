@@ -1,23 +1,23 @@
 name = "ContinuousStatePopulationDynamics"
 uuid = "5a68bfab-dffa-4d3c-8723-3d784ca1a3c3"
-version = "0.1.0"
 authors = ["Simon Frost"]
+version = "0.1.0"
 
 [deps]
 CommonSolve = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-StructuredPopulationCore = "33358fd2-7d60-4541-bded-caea801370e0"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+StructuredPopulationCore = "33358fd2-7d60-4541-bded-caea801370e0"
 
 [sources]
-StructuredPopulationCore = {path = "../StructuredPopulationCore.jl"}
+StructuredPopulationCore = {path = "../ProjectionModels.jl"}
 
 [compat]
 CommonSolve = "0.2"
-StructuredPopulationCore = "0.1.0"
 SciMLBase = "2"
-julia = "1.10"
+StructuredPopulationCore = "0.1.0"
+julia = "1.11"
 
 [extras]
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
