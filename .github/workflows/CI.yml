@@ -35,6 +35,11 @@ jobs:
         with:
           repository: ecorecipes/ProjectionModels.jl
           path: ProjectionModels.jl
+      - name: Checkout PhysiologicallyBasedDemographicModels.jl
+        uses: actions/checkout@v4
+        with:
+          repository: ecorecipes/PhysiologicallyBasedDemographicModels.jl
+          path: PhysiologicallyBasedDemographicModels.jl
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
