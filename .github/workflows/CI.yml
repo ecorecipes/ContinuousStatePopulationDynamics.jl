@@ -49,6 +49,9 @@ jobs:
           cache-compiled: 'true'
       - uses: julia-actions/julia-buildpkg@v1
         with:
+          project: PhysiologicallyBasedDemographicModels.jl
+      - uses: julia-actions/julia-buildpkg@v1
+        with:
           project: ContinuousStatePopulationDynamics.jl
       - uses: julia-actions/julia-runtest@v1
         with:
