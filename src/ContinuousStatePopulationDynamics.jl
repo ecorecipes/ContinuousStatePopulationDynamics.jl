@@ -24,6 +24,9 @@ import SciMLBase: remake
 # For the same reason, extend the functions that StructuredPopulationCore declares for all
 # model packages, rather than defining others of the same names.
 import StructuredPopulationCore: demographic_ensemble, to_ode_problem, to_dde_problem
+# The transport discretization types are shared with PhysiologicallyBasedDemographicModels.jl:
+# they are defined in StructuredPopulationCore, which does not export them, and exported here.
+import StructuredPopulationCore: AbstractTransportDiscretization, FixedMeshUpwind
 
 export AbstractContinuousStateDynamicsProblem
 export AbstractContinuousIPMProblem

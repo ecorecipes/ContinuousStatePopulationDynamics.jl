@@ -3,21 +3,10 @@ Population-structured transport problem types for continuous-state population
 dynamics.
 """
 
-"""
-    AbstractTransportDiscretization
-
-Supertype for numerical discretization strategies used to lower transport PDEs
-to ODE systems.
-"""
-abstract type AbstractTransportDiscretization end
-
-"""
-    FixedMeshUpwind()
-
-First-order upwind method-of-lines discretization on a fixed
-`ContinuousDomain`.
-"""
-struct FixedMeshUpwind <: AbstractTransportDiscretization end
+# `AbstractTransportDiscretization` and `FixedMeshUpwind` are defined in
+# StructuredPopulationCore and shared with PhysiologicallyBasedDemographicModels.jl. Here the
+# mesh is the problem's `ContinuousDomain`, so `FixedMeshUpwind()` is used without `n_mesh`;
+# an `n_mesh` that is given must agree with the domain.
 
 """
     PSPMIPMProblem(structure, domain, n0, tspan;
@@ -105,6 +94,11 @@ function PSPMIPMProblem(structure::AbstractIPMStructure,
     n0_vec = collect(n0)
     isempty(n0_vec) && throw(ArgumentError("n0 must contain at least one state value"))
     _validate_continuous_state(domain, n0_vec)
+    if discretization isa FixedMeshUpwind && discretization.n_mesh !== nothing
+        discretization.n_mesh == length(n0_vec) || throw(ArgumentError(
+            "FixedMeshUpwind(n_mesh = $(discretization.n_mesh)) does not match the domain, " *
+            "which has $(length(n0_vec)) mesh points; leave n_mesh out to use the domain's mesh"))
+    end
     aux0_vec = collect(aux0)
     T = _pspm_numeric_type(n0_vec, aux0_vec, tspan)
     return PSPMIPMProblem(

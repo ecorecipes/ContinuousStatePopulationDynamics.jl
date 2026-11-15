@@ -87,6 +87,29 @@ using SciMLBase: DDEProblem, ODEProblem
         @test prob2.tspan == (0.0, 2.0)
     end
 
+    @testset "FixedMeshUpwind is shared through StructuredPopulationCore" begin
+        SPC = ContinuousStatePopulationDynamics.StructuredPopulationCore
+        @test FixedMeshUpwind === SPC.FixedMeshUpwind
+        @test AbstractTransportDiscretization === SPC.AbstractTransportDiscretization
+        @test FixedMeshUpwind() isa AbstractTransportDiscretization
+        @test FixedMeshUpwind().n_mesh === nothing
+
+        # the mesh is the domain's: an n_mesh that is given has to agree with it
+        transport_domain = ContinuousDomain(0.0, 1.0, 3)
+        n0 = [1.0, 2.0, 3.0]
+        default = PSPMIPMProblem(transport_domain, n0, (0.0, 1.0); velocity = 1.0)
+        @test default.discretization === FixedMeshUpwind()
+        agreeing = PSPMIPMProblem(transport_domain, n0, (0.0, 1.0); velocity = 1.0,
+            discretization = FixedMeshUpwind(n_mesh = 3))
+        du_default, du_agreeing = zeros(3), zeros(3)
+        ode_default, ode_agreeing = to_ode_problem(default), to_ode_problem(agreeing)
+        ode_default.f(du_default, ode_default.u0, ode_default.p, 0.0)
+        ode_agreeing.f(du_agreeing, ode_agreeing.u0, ode_agreeing.p, 0.0)
+        @test du_default == du_agreeing
+        @test_throws ArgumentError PSPMIPMProblem(transport_domain, n0, (0.0, 1.0); velocity = 1.0,
+            discretization = FixedMeshUpwind(n_mesh = 40))
+    end
+
     @testset "PSPMIPMProblem with auxiliary state" begin
         transport_domain = ContinuousDomain(0.0, 1.0, 2)
         prob = PSPMIPMProblem(transport_domain, [2.0, 1.0], (0.0, 1.0);
