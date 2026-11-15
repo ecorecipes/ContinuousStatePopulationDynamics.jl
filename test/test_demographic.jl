@@ -81,6 +81,8 @@ end
         prob = ContinuousIPMProblem(G, domain, [30, 30], (0.0, 40.0))
         totals, _ = demographic_ensemble(prob; n_reps=300, saveat=1.0, rng=rng)
         @test size(totals, 1) == 41
+        # one function across the model packages, declared in the core package and extended here
+        @test demographic_ensemble === parentmodule(quasi_extinction).demographic_ensemble
         @test quasi_extinction(totals; threshold=1.0).prob_extinct > 0.5
     end
 
