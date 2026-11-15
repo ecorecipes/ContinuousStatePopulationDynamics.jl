@@ -21,9 +21,9 @@ using SciMLBase
 # so downstream code that does `using SciMLBase`/`using OrdinaryDiffEq` alongside
 # this package does not hit an export ambiguity on the unqualified name.
 import SciMLBase: remake
-# For the same reason, extend the `demographic_ensemble` that StructuredPopulationCore declares
-# for all model packages, rather than defining another function of that name.
-import StructuredPopulationCore: demographic_ensemble
+# For the same reason, extend the functions that StructuredPopulationCore declares for all
+# model packages, rather than defining others of the same names.
+import StructuredPopulationCore: demographic_ensemble, to_ode_problem, to_dde_problem
 
 export AbstractContinuousStateDynamicsProblem
 export AbstractContinuousIPMProblem

@@ -83,6 +83,8 @@ end
         @test size(totals, 1) == 41
         # one function across the model packages, declared in the core package and extended here
         @test demographic_ensemble === parentmodule(quasi_extinction).demographic_ensemble
+        @test to_ode_problem === parentmodule(quasi_extinction).to_ode_problem
+        @test to_dde_problem === parentmodule(quasi_extinction).to_dde_problem
         @test quasi_extinction(totals; threshold=1.0).prob_extinct > 0.5
     end
 
