@@ -27,6 +27,11 @@ import StructuredPopulationCore: demographic_ensemble, to_ode_problem, to_dde_pr
 # The transport discretization types are shared with PhysiologicallyBasedDemographicModels.jl:
 # they are defined in StructuredPopulationCore, which does not export them, and exported here.
 import StructuredPopulationCore: AbstractTransportDiscretization, FixedMeshUpwind
+# Resilience operators: this package adds methods to ResilienceCore's `linearise`, so that the
+# metrics of ResilienceCore apply to its problems.
+import ResilienceCore
+using ResilienceCore: linearise, Generator, ContinuousJacobian, mesh_weights, affine_equilibrium,
+                      periodic_generator
 
 export AbstractContinuousStateDynamicsProblem
 export AbstractContinuousIPMProblem
@@ -36,6 +41,7 @@ export AbstractTransportDiscretization, FixedMeshUpwind, PSPMIPMProblem
 export remake
 export to_ode_problem, to_dde_problem
 export solve
+export linearise
 
 # Demographic stochasticity
 export Demographic
@@ -61,6 +67,9 @@ include("pspm_problems.jl")
 include("sciml_interface.jl")
 include("solve.jl")
 include("demographic.jl")
+
+# ResilienceCore operators
+include("resilience.jl")
 using CommonSolve: solve
 
 end # module
