@@ -24,6 +24,10 @@ types as separate extension packages rather than widening the core backend.
   dynamics.
 - **SciML lowering**: `to_ode_problem`, `to_dde_problem`, and
   `CommonSolve.solve` dispatch into the SciML solver stack.
+- **Resilience operators**: `linearise` (from
+  [ResilienceCore.jl](https://github.com/ecorecipes/ResilienceCore.jl)) gives the `Generator`
+  (with mesh weights), the Jacobian at an equilibrium, or the periodic operator of a problem,
+  so that ResilienceCore's stability and resilience metrics apply.
 - **Categorical lowering target**:
   [CategoricalPopulationDynamics.jl](https://github.com/ecorecipes/CategoricalPopulationDynamics.jl)
   ships a weakdep extension (`...ContinuousStatePopulationDynamicsExt`) that
