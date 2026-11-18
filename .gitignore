@@ -14,3 +14,6 @@ vignettes/**/*_files/libs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Synced from vignettes/ by docs/make.jl
+docs/src/tutorials/
