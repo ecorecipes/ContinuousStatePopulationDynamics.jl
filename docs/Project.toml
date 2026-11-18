@@ -1,0 +1,11 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+ContinuousStatePopulationDynamics = "5a68bfab-dffa-4d3c-8723-3d784ca1a3c3"
+StructuredPopulationCore = "33358fd2-7d60-4541-bded-caea801370e0"
+
+[sources]
+ContinuousStatePopulationDynamics = {path = ".."}
+StructuredPopulationCore = {path = "../../ProjectionModels.jl"}
+
+[compat]
+Documenter = "1"
